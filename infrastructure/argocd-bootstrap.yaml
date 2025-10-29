@@ -1,0 +1,70 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nginx-poc-gitops-1
+  namespace: argocd
+  labels:
+    app: nginx-poc
+    project: poc-gitops-1
+    environment: production
+    version: v1.0.0
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+    description: "Application Nginx pour le POC GitOps-1"
+spec:
+  project: default
+  
+  # Source de la configuration (dépôt Git)
+  source:
+    repoURL: https://github.com/OlivierLAVAUD/poc-gitops-1.git
+    targetRevision: main
+    path: applications/apps/nginx/overlays/production
+    directory:
+      recurse: true
+  
+  # Destination (cluster Kubernetes)
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: nginx-poc
+  
+  # Politique de synchronisation avancée
+  syncPolicy:
+    automated:
+      prune: true          # Supprime les ressources qui n'existent plus dans Git
+      selfHeal: true       # Corrige automatiquement les dérives
+      allowEmpty: false    # N'autorise pas les applications vides
+    
+    syncOptions:
+    - CreateNamespace=true # Crée le namespace s'il n'existe pas
+    - ApplyOutOfSyncOnly=true
+    - PrunePropagationPolicy=foreground
+    - PruneLast=true
+    - RespectIgnoreDifferences=true
+    - ServerSideApply=false
+    
+    retry:
+      limit: 5            # Nombre maximum de tentatives de synchronisation
+      backoff:
+        duration: 5s      # Durée initiale avant retry
+        factor: 2         # Facteur multiplicateur
+        maxDuration: 3m   # Durée maximum entre retry
+
+  # Politique d'ignore des différences
+  ignoreDifferences:
+  - group: apps
+    kind: Deployment
+    name: nginx-poc-gitops-1
+    jsonPointers:
+    - /spec/replicas
+    - /status
+    - /metadata/annotations/kubectl.kubernetes.io~1last-applied-configuration
+    - /metadata/annotations/deployment.kubernetes.io~1revision
+
+  # Info pour l'interface Argo CD (optionnel)
+  info:
+  - name: description
+    value: Application Nginx déployée via GitOps
+  - name: repository
+    value: https://github.com/OlivierLAVAUD/poc-gitops-1
+  - name: maintainer
+    value: DevOps Team
